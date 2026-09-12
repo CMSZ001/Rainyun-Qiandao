@@ -2,7 +2,7 @@ name: Rainyun 自动签到
 
 on:
   schedule:
-    - cron: '30 0 * * *'  # UTC+8 12点执行
+    - cron: '30 0 * * *'  # UTC 00:30 = 北京时间 08:30（所有 fork 同一时刻触发，靠下面的随机错峰打散）
   workflow_dispatch:  # 允许手动触发
 
 jobs:
@@ -101,6 +101,21 @@ jobs:
           restore-keys: |
             rainyun-cookies-${{ steps.hash.outputs.user_hash }}-
       
+      - name: 随机错峰延迟
+        # 定时触发才错峰；手动触发立即执行
+        if: github.event_name == 'schedule'
+        # 多人同时用同一套方案时，上游会按时间聚类封禁；这里让每次运行在窗口内随机起步
+        # 如需调窗口：仓库 Settings > Secrets and variables > Actions > Variables 里加 SIGN_DELAY_MAX（秒），默认 1800
+        env:
+          SIGN_DELAY_MAX: ${{ vars.SIGN_DELAY_MAX || '1800' }}
+        run: |
+          MAX=${SIGN_DELAY_MAX:-1800}
+          if [ "$MAX" -gt 0 ] 2>/dev/null; then
+            DELAY=$(shuf -i 0-"$MAX" -n 1)
+            echo "随机延迟 ${DELAY} 秒后开始签到（窗口 0-${MAX}s）"
+            sleep "$DELAY"
+          fi
+
       - name: 执行签到脚本
        # 开启debug查看完整过程
         run: python rainyun.py
